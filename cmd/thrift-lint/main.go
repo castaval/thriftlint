@@ -23,8 +23,8 @@ var (
 func main() {
 	kingpin.CommandLine.Help = `
 	A linter for Thrift.
-	
-	
+
+
 	`
 	kingpin.Parse()
 	checkers := thriftlint.Checks{
@@ -69,6 +69,8 @@ func main() {
 		pos := thriftlint.Pos(msg.Object)
 		fmt.Fprintf(os.Stderr, "%s:%d:%d:%s: %s (%s)\n", msg.File.Filename, pos.Line, pos.Col,
 			msg.Severity, msg.Message, msg.Checker)
+		fixer := thriftlint.NewFixer(pos, msg)
+		fixer.FixWarning()
 		status |= 1 << uint(msg.Severity)
 	}
 
