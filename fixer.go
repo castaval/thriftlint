@@ -31,7 +31,7 @@ func (f *Fixer) FixWarning() {
 		for index, item := range temp {
 
 			if pos.Line == index+1 {
-				fixFileSlice = append(fixFileSlice, fixedRow)
+				fixFileSlice = append(fixFileSlice, fixedRow...)
 				continue
 			}
 
@@ -45,27 +45,34 @@ func (f *Fixer) FixWarning() {
 
 }
 
-func (f *Fixer) fixRow(message *Message) (fixedRow string) {
+func (f *Fixer) fixRow(message *Message) (fixedRow []string) {
 	messageType := message.Checker
 	rv := reflect.Indirect(reflect.ValueOf(message.Object))
 	pos := rv.FieldByName("Pos")
 	col := pos.FieldByName("Col").Interface().(int)
 	name := rv.FieldByName("Name").Interface().(string)
-	fmt.Println(rv.Type())
 
-	values, row := f.createRow(rv)
 	switch messageType {
 	case "naming":
+		values, row := f.createRow(rv)
 		rightName := f.fixNaming(name, message)
+		values = values[:len(values)-1]
 		values = append(values, rightName)
 		fmt.Println(values...)
 		rowWithPos := fmt.Sprint(strings.Repeat(" ", col-1) + row)
-		fixedRow = fmt.Sprintf(rowWithPos, values...)
+		fixedRow = append(fixedRow, fmt.Sprintf(rowWithPos, values...))
 	case "optional":
-		values = append(values, name)
+		values, row := f.createRow(rv)
 		fmt.Println(values...)
 		rowWithPos := fmt.Sprint(strings.Repeat(" ", col-1) + row)
-		fixedRow = fmt.Sprintf(rowWithPos, values...)
+		fixedRow = append(fixedRow, fmt.Sprintf(rowWithPos, values...))
+	case "enum":
+		fmt.Println(rv.FieldByName("Values"))
+		for _, value := range rv.FieldByName("Values").MapKeys() {
+			values, row := f.createRow(reflect.Indirect(rv.FieldByName("Values").MapIndex(value)))
+			rowWithPos := fmt.Sprint(strings.Repeat(" ", 0) + row)
+			fixedRow = append(fixedRow, fmt.Sprintf(rowWithPos, values...))
+		}
 	}
 	return
 }
@@ -73,12 +80,11 @@ func (f *Fixer) fixRow(message *Message) (fixedRow string) {
 func (f *Fixer) createRow(construct reflect.Value) (values []any, row string) {
 	switch construct.Interface().(type) {
 	case parser.Field:
-		values = []any{construct.FieldByName("ID").Interface().(int), reflect.ValueOf("optional").Interface().(string), construct.FieldByName("Type")}
+		values = []any{construct.FieldByName("ID").Interface().(int), reflect.ValueOf("optional").Interface().(string), construct.FieldByName("Type"), construct.FieldByName("Name").Interface().(string)}
 		row = "%d: %s %s %s"
 	case parser.EnumValue:
-		values = []any{}
+		values = []any{construct.FieldByName("Name").Interface().(string)}
 		row = "%s"
-		// case parser.Union
 	}
 	return
 }
