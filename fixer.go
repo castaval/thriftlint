@@ -42,26 +42,53 @@ func (f *Fixer) FixWarning() {
 	fixedFile := []byte(strings.Join(fixFileSlice, "\n"))
 
 	os.WriteFile(f.Message.File.Filename, fixedFile, 0666)
-
 }
 
 func (f *Fixer) fixRow() (fixedRow string) {
 	messageType := f.Message.Checker
+	rv := reflect.Indirect(reflect.ValueOf(f.Message.Object))
+	pos := rv.FieldByName("Pos")
+	col := pos.FieldByName("Col").Interface().(int)
+	name := rv.FieldByName("Name").Interface().(string)
+	fmt.Println(rv.Type())
+
+	values, row := f.createRow(rv)
 	switch messageType {
 	case "naming":
-		rv := reflect.Indirect(reflect.ValueOf(f.Message.Object))
-		pos := rv.FieldByName("Pos")
-		col := pos.FieldByName("Col").Interface().(int)
-		name := rv.FieldByName("Name")
-		id := rv.FieldByName("ID").Int()
-		types := rv.FieldByName("Type")
+		rightName := f.fixNaming(name)
+		values = append(values, rightName)
+		fmt.Println(values...)
+		rowWithPos := fmt.Sprint(strings.Repeat(" ", col-1) + row)
+		fixedRow = fmt.Sprintf(rowWithPos, values...)
+	case "optional":
+		values = append(values, name)
+		fmt.Println(values...)
+		rowWithPos := fmt.Sprint(strings.Repeat(" ", col-1) + row)
+		fixedRow = fmt.Sprintf(rowWithPos, values...)
+	}
+	return
+}
 
-		optional := "optional"
+func (f *Fixer) createRow(construct reflect.Value) (values []any, row string) {
+	switch construct.Interface().(type) {
+	case parser.Field:
+		values = []any{construct.FieldByName("ID").Interface().(int), reflect.ValueOf("optional").Interface().(string), construct.FieldByName("Type")}
+		row = "%d: %s %s %s"
+	case parser.EnumValue:
+		values = []any{}
+		row = "%s"
+		// case parser.Union
+	}
+	return
+}
 
-		fmt.Println(pos, col, id, optional, name, types)
-		row := fmt.Sprint(strings.Repeat(" ", col-1) + "%d: %s %s %s")
-		fixedRow = fmt.Sprintf(row, id, optional, types, name)
-		return
+func (f *Fixer) fixNaming(name string) (rightName string) {
+	if strings.Contains(f.Message.Message, "camel case") {
+		rightName = LowerCamelCase(name)
+	} else if strings.Contains(f.Message.Message, "title case") {
+		rightName = UpperCamelCase(name)
+	} else {
+		rightName = UpperSnakeCase(name)
 	}
 	return
 }
