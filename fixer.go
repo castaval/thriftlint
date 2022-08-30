@@ -10,43 +10,44 @@ import (
 )
 
 type Fixer struct {
-	Pos     parser.Pos
-	Message *Message
+	Message []*Message
 }
 
-func NewFixer(pos parser.Pos, message *Message) *Fixer {
-	return &Fixer{Pos: pos, Message: message}
+func NewFixer(message []*Message) *Fixer {
+	return &Fixer{Message: message}
 }
 
 func (f *Fixer) FixWarning() {
-	file, err := os.ReadFile(f.Message.File.Filename)
-	if err != nil {
-		return
-	}
+	for _, msg := range f.Message {
+		file, err := os.ReadFile(msg.File.Filename)
+		if err != nil {
+			return
+		}
+		pos := Pos(msg.Object)
+		fileString := string(file)
+		temp := strings.Split(fileString, "\n")
+		var fixFileSlice []string
+		fixedRow := f.fixRow(msg)
+		for index, item := range temp {
 
-	fileString := string(file)
-	temp := strings.Split(fileString, "\n")
-	var fixFileSlice []string
+			if pos.Line == index+1 {
+				fixFileSlice = append(fixFileSlice, fixedRow)
+				continue
+			}
 
-	fixedRow := f.fixRow()
-	for index, item := range temp {
-
-		if f.Pos.Line == index+1 {
-			fixFileSlice = append(fixFileSlice, fixedRow)
-			continue
+			fixFileSlice = append(fixFileSlice, item)
 		}
 
-		fixFileSlice = append(fixFileSlice, item)
+		fixedFile := []byte(strings.Join(fixFileSlice, "\n"))
+
+		os.WriteFile(msg.File.Filename, fixedFile, 0666)
 	}
 
-	fixedFile := []byte(strings.Join(fixFileSlice, "\n"))
-
-	os.WriteFile(f.Message.File.Filename, fixedFile, 0666)
 }
 
-func (f *Fixer) fixRow() (fixedRow string) {
-	messageType := f.Message.Checker
-	rv := reflect.Indirect(reflect.ValueOf(f.Message.Object))
+func (f *Fixer) fixRow(message *Message) (fixedRow string) {
+	messageType := message.Checker
+	rv := reflect.Indirect(reflect.ValueOf(message.Object))
 	pos := rv.FieldByName("Pos")
 	col := pos.FieldByName("Col").Interface().(int)
 	name := rv.FieldByName("Name").Interface().(string)
@@ -55,7 +56,7 @@ func (f *Fixer) fixRow() (fixedRow string) {
 	values, row := f.createRow(rv)
 	switch messageType {
 	case "naming":
-		rightName := f.fixNaming(name)
+		rightName := f.fixNaming(name, message)
 		values = append(values, rightName)
 		fmt.Println(values...)
 		rowWithPos := fmt.Sprint(strings.Repeat(" ", col-1) + row)
@@ -82,10 +83,10 @@ func (f *Fixer) createRow(construct reflect.Value) (values []any, row string) {
 	return
 }
 
-func (f *Fixer) fixNaming(name string) (rightName string) {
-	if strings.Contains(f.Message.Message, "camel case") {
+func (f *Fixer) fixNaming(name string, message *Message) (rightName string) {
+	if strings.Contains(message.Message, "camel case") {
 		rightName = LowerCamelCase(name)
-	} else if strings.Contains(f.Message.Message, "title case") {
+	} else if strings.Contains(message.Message, "title case") {
 		rightName = UpperCamelCase(name)
 	} else {
 		rightName = UpperSnakeCase(name)
