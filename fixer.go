@@ -19,6 +19,11 @@ func NewFixer(message []*Message) *Fixer {
 
 func (f *Fixer) FixWarning() {
 	for _, msg := range f.Message {
+
+		if msg.Severity == Error {
+			continue
+		}
+
 		file, err := os.ReadFile(msg.File.Filename)
 		if err != nil {
 			return
@@ -29,6 +34,7 @@ func (f *Fixer) FixWarning() {
 		var fixFileSlice []string
 		fixedRow := f.fixRow(msg, temp[pos.Line-1])
 
+		fmt.Println(len(temp))
 		for i := 0; i < len(temp); i++ {
 
 			if msg.Checker == "enum" && i == pos.Line {
@@ -85,8 +91,13 @@ func (f *Fixer) fixRow(message *Message, line string) (fixedRow []string) {
 func (f *Fixer) createRow(construct reflect.Value, line string) (values []any, row string) {
 	switch construct.Interface().(type) {
 	case parser.Field:
-		values = []any{construct.FieldByName("ID").Interface().(int), reflect.ValueOf("optional").Interface().(string), construct.FieldByName("Type"), construct.FieldByName("Name").Interface().(string)}
-		row = "%d: %s %s %s"
+		if construct.FieldByName("Optional").Interface().(bool) {
+			values = []any{construct.FieldByName("ID").Interface().(int), construct.FieldByName("Type"), construct.FieldByName("Name").Interface().(string)}
+			row = "%d: %s %s"
+		} else {
+			values = []any{construct.FieldByName("ID").Interface().(int), reflect.ValueOf("optional").Interface().(string), construct.FieldByName("Type"), construct.FieldByName("Name").Interface().(string)}
+			row = "%d: %s %s %s"
+		}
 	case parser.EnumValue:
 		values = []any{construct.FieldByName("Name").Interface().(string)}
 		row = "%s"
