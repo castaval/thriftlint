@@ -27,15 +27,20 @@ func (f *Fixer) FixWarning() {
 		fileString := string(file)
 		temp := strings.Split(fileString, "\n")
 		var fixFileSlice []string
-		fixedRow := f.fixRow(msg)
-		for index, item := range temp {
+		fixedRow := f.fixRow(msg, temp[pos.Line-1])
 
-			if pos.Line == index+1 {
+		for i := 0; i < len(temp); i++ {
+
+			if msg.Checker == "enum" && i == pos.Line {
+				fixFileSlice = append(fixFileSlice, fixedRow...)
+				i += len(fixedRow) - 1
+				continue
+			} else if pos.Line == i+1 && msg.Checker != "enum" {
 				fixFileSlice = append(fixFileSlice, fixedRow...)
 				continue
 			}
 
-			fixFileSlice = append(fixFileSlice, item)
+			fixFileSlice = append(fixFileSlice, temp[i])
 		}
 
 		fixedFile := []byte(strings.Join(fixFileSlice, "\n"))
@@ -45,7 +50,7 @@ func (f *Fixer) FixWarning() {
 
 }
 
-func (f *Fixer) fixRow(message *Message) (fixedRow []string) {
+func (f *Fixer) fixRow(message *Message, line string) (fixedRow []string) {
 	messageType := message.Checker
 	rv := reflect.Indirect(reflect.ValueOf(message.Object))
 	pos := rv.FieldByName("Pos")
@@ -54,7 +59,7 @@ func (f *Fixer) fixRow(message *Message) (fixedRow []string) {
 
 	switch messageType {
 	case "naming":
-		values, row := f.createRow(rv)
+		values, row := f.createRow(rv, line)
 		rightName := f.fixNaming(name, message)
 		values = values[:len(values)-1]
 		values = append(values, rightName)
@@ -62,14 +67,14 @@ func (f *Fixer) fixRow(message *Message) (fixedRow []string) {
 		rowWithPos := fmt.Sprint(strings.Repeat(" ", col-1) + row)
 		fixedRow = append(fixedRow, fmt.Sprintf(rowWithPos, values...))
 	case "optional":
-		values, row := f.createRow(rv)
+		values, row := f.createRow(rv, line)
 		fmt.Println(values...)
 		rowWithPos := fmt.Sprint(strings.Repeat(" ", col-1) + row)
 		fixedRow = append(fixedRow, fmt.Sprintf(rowWithPos, values...))
 	case "enum":
 		fmt.Println(rv.FieldByName("Values"))
 		for _, value := range rv.FieldByName("Values").MapKeys() {
-			values, row := f.createRow(reflect.Indirect(rv.FieldByName("Values").MapIndex(value)))
+			values, row := f.createRow(reflect.Indirect(rv.FieldByName("Values").MapIndex(value)), line)
 			rowWithPos := fmt.Sprint(strings.Repeat(" ", 0) + row)
 			fixedRow = append(fixedRow, fmt.Sprintf(rowWithPos, values...))
 		}
@@ -77,7 +82,7 @@ func (f *Fixer) fixRow(message *Message) (fixedRow []string) {
 	return
 }
 
-func (f *Fixer) createRow(construct reflect.Value) (values []any, row string) {
+func (f *Fixer) createRow(construct reflect.Value, line string) (values []any, row string) {
 	switch construct.Interface().(type) {
 	case parser.Field:
 		values = []any{construct.FieldByName("ID").Interface().(int), reflect.ValueOf("optional").Interface().(string), construct.FieldByName("Type"), construct.FieldByName("Name").Interface().(string)}
@@ -85,6 +90,18 @@ func (f *Fixer) createRow(construct reflect.Value) (values []any, row string) {
 	case parser.EnumValue:
 		values = []any{construct.FieldByName("Name").Interface().(string)}
 		row = "%s"
+	case parser.Struct:
+		values = []any{construct.FieldByName("Name").Interface().(string)}
+		if strings.Contains(line, "struct") {
+			row = "struct %s {"
+		} else if strings.Contains(line, "union") {
+			row = "union %s {"
+		} else {
+			row = "exception %s {"
+		}
+	case parser.Service:
+		values = []any{construct.FieldByName("Name").Interface().(string)}
+		row = "service %s {"
 	}
 	return
 }
